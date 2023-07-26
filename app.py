@@ -12,7 +12,8 @@ if data_file is not None:
     df['Spread médio ponderado'] = df.groupby(['Data', 'Segmento'])['Spread ponderado'].transform('sum') / df.groupby(['Data', 'Segmento'])['Peso no índice (%)'].transform('sum')
     
     st.header("Escolha o gráfico")
-    graph_options = ["Evolução dos Spreads Médios Ponderados", "Peso por Segmento", "Duration Média Ponderada", "Distribuição Callable"]
+    graph_options = ["Evolução dos Spreads Médios Ponderados", "Peso por Segmento", "Duration Média Ponderada", "Peso por Segmento ao Longo do Tempo"]
+
     selected_graph = st.radio("Selecione um gráfico", graph_options)
 
     col1, col2 = st.columns(2)
@@ -28,14 +29,23 @@ if data_file is not None:
 
     if selected_graph == "Evolução dos Spreads Médios Ponderados":
         with col2:
-            st.header("Selecione os segmentos")
+            st.header("Segmentos")
             segments = st.multiselect("Escolha os segmentos", df['Segmento'].unique())
+
+            remove_outliers = st.radio("Remover outliers?", ['Sim', 'Não'])
+            if remove_outliers == 'Sim':
+                outlier_threshold = st.number_input("Digite o valor acima do qual um ponto é considerado um outlier", value=70.0, step=0.1)
+                df = df[df['Spread médio ponderado'] < outlier_threshold / 100] 
+
+        df['Spread médio ponderado'] *= 100 
         if segments:
             df = df[df['Segmento'].isin(segments)]
             fig = px.line(df, x='Data', y='Spread médio ponderado', color='Segmento')
+            fig.update_layout(title='Evolução dos Spreads Médios Ponderados', yaxis_title='Spread Médio Ponderado (%)')
             st.plotly_chart(fig)
         else:
             fig = px.line(df, x='Data', y='Spread médio ponderado')
+            fig.update_layout(title='Evolução dos Spreads Médios Ponderados', yaxis_title='Spread Médio Ponderado (%)')
             st.plotly_chart(fig)
     elif selected_graph == "Peso por Segmento":
         weights = df.groupby('Segmento')['Peso no índice (%)'].sum()
@@ -54,12 +64,22 @@ if data_file is not None:
         else:
             fig = px.line(df, x='Data', y='Duration média ponderada')
             st.plotly_chart(fig)
-
-    elif selected_graph == "Distribuição Callable":
-        fig = px.histogram(df, x="Callable")
+    elif selected_graph == "Peso por Segmento ao Longo do Tempo":
+        df_grouped = df.groupby(['Data', 'Segmento'])['Peso no índice (%)'].sum().reset_index()
+        fig = px.bar(df_grouped, x='Data', y='Peso no índice (%)', color='Segmento', title='Evolução do Peso por Segmento ao Longo do Tempo')
+        fig.update_layout(yaxis_title='Peso no Índice (%)')
         st.plotly_chart(fig)
 
-    st.header("Empresas com maior peso Médio")
-    df_grouped = df.groupby('Emissor')['Peso no índice (%)'].mean().reset_index()
-    top_emitters = df_grouped.nlargest(10, 'Peso no índice (%)')
-    st.dataframe(top_emitters)
+    col3, col4 = st.columns(2)
+
+    with col3:
+        st.header("Empresas com maior peso Médio")
+        df_grouped = df.groupby('Emissor')['Peso no índice (%)'].mean().reset_index()
+        top_emitters = df_grouped.nlargest(10, 'Peso no índice (%)')
+        st.dataframe(top_emitters)
+
+    with col4:
+        st.header("Frequência de Segmentos")
+        segment_freq = df['Segmento'].value_counts()
+        segment_freq.columns = ['Segmento', 'Frequência']
+        st.dataframe(segment_freq)
